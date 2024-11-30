@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import axios from 'axios'
-import { SparklesIcon, VideoCameraIcon, PencilSquareIcon } from '@heroicons/react/24/outline'
+import { SparklesIcon } from '@heroicons/react/24/outline'
 import HeroSection from '../components/HeroSection'
 
 type Step = 'ideas' | 'title' | 'thumbnail' | 'hook' | 'content';
+type Tone = 'engaging' | 'professional' | 'funny' | 'educational' | 'dramatic' | 'casual';
+type Language = 'English' | 'Polish';
 
 interface GeneratedContent {
   ideas?: string[];
@@ -15,9 +17,6 @@ interface GeneratedContent {
   selectedThumbnail?: string;
   hooks?: string[];
   selectedHook?: string;
-  title?: string;
-  thumbnail?: string;
-  hook?: string;
 }
 
 interface ApiResponse {
@@ -33,30 +32,31 @@ export default function Dashboard() {
   const [currentStep, setCurrentStep] = useState<Step>('ideas');
   const [content, setContent] = useState<GeneratedContent>({});
   const [topic, setTopic] = useState('')
-  const [tone, setTone] = useState('engaging')
-  const [language, setLanguage] = useState('English')
+  const [tone, setTone] = useState<Tone>('engaging')
+  const [language, setLanguage] = useState<Language>('English')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null);
 
   const tones = [
-    { id: 'engaging', name: 'Engaging', namePL: 'Angażujący' },
-    { id: 'professional', name: 'Professional', namePL: 'Profesjonalny' },
-    { id: 'funny', name: 'Funny', namePL: 'Zabawny' },
-    { id: 'educational', name: 'Educational', namePL: 'Edukacyjny' },
-    { id: 'dramatic', name: 'Dramatic', namePL: 'Dramatyczny' },
-    { id: 'casual', name: 'Casual', namePL: 'Swobodny' },
+    { id: 'engaging' as Tone, name: 'Engaging', namePL: 'Angażujący' },
+    { id: 'professional' as Tone, name: 'Professional', namePL: 'Profesjonalny' },
+    { id: 'funny' as Tone, name: 'Funny', namePL: 'Zabawny' },
+    { id: 'educational' as Tone, name: 'Educational', namePL: 'Edukacyjny' },
+    { id: 'dramatic' as Tone, name: 'Dramatic', namePL: 'Dramatyczny' },
+    { id: 'casual' as Tone, name: 'Casual', namePL: 'Swobodny' },
   ] as const;
 
-  const handleSelection = (type: keyof GeneratedContent, item: string) => {
+  const handleSelection = (type: keyof Pick<GeneratedContent, 'ideas' | 'title' | 'thumbnail' | 'hook'>, item: string) => {
+    const key = `selected${type.charAt(0).toUpperCase() + type.slice(1)}` as keyof GeneratedContent;
     setContent(prev => ({
       ...prev,
-      [`selected${type.charAt(0).toUpperCase() + type.slice(1)}`]: item
+      [key]: item
     }));
   };
 
   const renderOptions = (
     items: string[] | undefined,
-    type: keyof GeneratedContent,
+    type: keyof Pick<GeneratedContent, 'ideas' | 'title' | 'thumbnail' | 'hook'>,
     selectedItem?: string
   ) => {
     if (!items) return null;
@@ -104,7 +104,7 @@ export default function Dashboard() {
 
         case 'title':
           if (!content.selectedIdea) {
-            throw new Error('Please select an idea first');
+            throw new Error(language === 'English' ? 'Please select an idea first' : 'Najpierw wybierz pomysł');
           }
           response = await axios.post(`${API_URL}/api/generate/title`, {
             idea: content.selectedIdea,
@@ -118,7 +118,7 @@ export default function Dashboard() {
 
         case 'thumbnail':
           if (!content.selectedTitle) {
-            throw new Error('Please select a title first');
+            throw new Error(language === 'English' ? 'Please select a title first' : 'Najpierw wybierz tytuł');
           }
           response = await axios.post(`${API_URL}/api/generate/thumbnail`, {
             title: content.selectedTitle,
@@ -132,7 +132,7 @@ export default function Dashboard() {
 
         case 'hook':
           if (!content.selectedTitle) {
-            throw new Error('Please select a title first');
+            throw new Error(language === 'English' ? 'Please select a title first' : 'Najpierw wybierz tytuł');
           }
           response = await axios.post(`${API_URL}/api/generate/hook`, {
             title: content.selectedTitle,
@@ -152,8 +152,31 @@ export default function Dashboard() {
         setCurrentStep(steps[currentIndex + 1]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      console.error('Generation error:', err);
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 429) {
+          setError(
+            language === 'English'
+              ? 'Too many requests. Please wait a moment before trying again.'
+              : 'Zbyt wiele żądań. Poczekaj chwilę przed ponowną próbą.'
+          );
+        } else if (err.response?.data?.detail) {
+          setError(err.response.data.detail);
+        } else {
+          setError(
+            language === 'English'
+              ? 'An error occurred. Please try again.'
+              : 'Wystąpił błąd. Spróbuj ponownie.'
+          );
+        }
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(
+          language === 'English'
+            ? 'An unexpected error occurred.'
+            : 'Wystąpił nieoczekiwany błąd.'
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -256,6 +279,7 @@ export default function Dashboard() {
                 </div>
 
                 {renderCurrentStep()}
+
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
@@ -265,6 +289,7 @@ export default function Dashboard() {
                 >
                   {isLoading ? 'Generating...' : 'Generate'}
                 </motion.button>
+
                 {error && (
                   <p className="text-red-500">{error}</p>
                 )}
@@ -274,5 +299,5 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
-  )
+  );
 }
