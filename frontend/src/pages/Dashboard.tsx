@@ -15,6 +15,18 @@ interface GeneratedContent {
   selectedThumbnail?: string;
   hooks?: string[];
   selectedHook?: string;
+  title?: string;
+  thumbnail?: string;
+  hook?: string;
+}
+
+interface ApiResponse {
+  status: string;
+  ideas?: string[];
+  titles?: string[];
+  thumbnail_texts?: string[];
+  hooks?: string[];
+  error?: string;
 }
 
 export default function Dashboard() {
@@ -33,7 +45,7 @@ export default function Dashboard() {
     { id: 'educational', name: 'Educational', namePL: 'Edukacyjny' },
     { id: 'dramatic', name: 'Dramatic', namePL: 'Dramatyczny' },
     { id: 'casual', name: 'Casual', namePL: 'Swobodny' },
-  ]
+  ] as const;
 
   const handleSelection = (type: keyof GeneratedContent, item: string) => {
     setContent(prev => ({
@@ -76,7 +88,8 @@ export default function Dashboard() {
     const API_URL = import.meta.env.VITE_API_URL;
 
     try {
-      let response;
+      let response: { data: ApiResponse };
+      
       switch (currentStep) {
         case 'ideas':
           response = await axios.post(`${API_URL}/api/generate/ideas`, {
@@ -84,7 +97,7 @@ export default function Dashboard() {
             tone,
             language
           });
-          if (response.data.status === 'success') {
+          if (response.data.status === 'success' && response.data.ideas) {
             setContent(prev => ({ ...prev, ideas: response.data.ideas }));
           }
           break;
@@ -98,7 +111,7 @@ export default function Dashboard() {
             tone,
             language
           });
-          if (response.data.status === 'success') {
+          if (response.data.status === 'success' && response.data.titles) {
             setContent(prev => ({ ...prev, titles: response.data.titles }));
           }
           break;
@@ -112,7 +125,7 @@ export default function Dashboard() {
             tone,
             language
           });
-          if (response.data.status === 'success') {
+          if (response.data.status === 'success' && response.data.thumbnail_texts) {
             setContent(prev => ({ ...prev, thumbnailTexts: response.data.thumbnail_texts }));
           }
           break;
@@ -126,7 +139,7 @@ export default function Dashboard() {
             tone,
             language
           });
-          if (response.data.status === 'success') {
+          if (response.data.status === 'success' && response.data.hooks) {
             setContent(prev => ({ ...prev, hooks: response.data.hooks }));
           }
           break;

@@ -2,6 +2,8 @@ import { Fragment } from 'react'
 import { Disclosure, Menu, Transition } from '@headlessui/react'
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline'
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { motion } from 'framer-motion'
 
 const navigation = [
   { name: 'Dashboard', href: '/', current: true },
@@ -14,70 +16,69 @@ function classNames(...classes: string[]) {
 }
 
 export default function Navigation() {
-  return (
-    <Disclosure as="nav" className="bg-purple-900/50 backdrop-blur-sm">
-      {({ open }) => (
-        <>
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex h-16 justify-between">
-              <div className="flex">
-                <div className="flex flex-shrink-0 items-center">
-                  <Link to="/" className="text-2xl font-bold text-white">
-                    Julia Jakubowska
-                  </Link>
-                </div>
-                <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                  {navigation.map((item) => (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className={classNames(
-                        item.current
-                          ? 'border-purple-500 text-white'
-                          : 'border-transparent text-gray-300 hover:border-purple-300 hover:text-white',
-                        'inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium'
-                      )}
-                    >
-                      {item.name}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="-mr-2 flex items-center sm:hidden">
-                <Disclosure.Button className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:bg-purple-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white">
-                  <span className="sr-only">Open main menu</span>
-                  {open ? (
-                    <XMarkIcon className="block h-6 w-6" aria-hidden="true" />
-                  ) : (
-                    <Bars3Icon className="block h-6 w-6" aria-hidden="true" />
-                  )}
-                </Disclosure.Button>
-              </div>
-            </div>
-          </div>
+  const [isOpen, setIsOpen] = useState(false)
 
-          <Disclosure.Panel className="sm:hidden">
-            <div className="space-y-1 pb-3 pt-2">
-              {navigation.map((item) => (
-                <Disclosure.Button
-                  key={item.name}
-                  as={Link}
-                  to={item.href}
-                  className={classNames(
-                    item.current
-                      ? 'border-purple-500 bg-purple-50 bg-opacity-10'
-                      : 'border-transparent',
-                    'block border-l-4 py-2 pl-3 pr-4 text-base font-medium text-white'
-                  )}
-                >
-                  {item.name}
-                </Disclosure.Button>
-              ))}
-            </div>
-          </Disclosure.Panel>
-        </>
+  return (
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-900 to-purple-800">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          <motion.div
+            className="flex-shrink-0"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Link to="/" className="text-2xl font-bold text-white">Julia Jakubowska</Link>
+          </motion.div>
+          
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setIsOpen(!isOpen)}
+            className="p-2 rounded-md text-white hover:bg-purple-700 focus:outline-none"
+          >
+            <span className="sr-only">Open menu</span>
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d={isOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"}
+              />
+            </svg>
+          </motion.button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="sm:hidden"
+        >
+          <div className="px-2 pt-2 pb-3 space-y-1">
+            {navigation.map((item) => (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={classNames(
+                  item.current
+                    ? 'bg-purple-50 bg-opacity-10'
+                    : '',
+                  'block px-3 py-2 rounded-md text-white hover:bg-purple-700'
+                )}
+              >
+                {item.name}
+              </Link>
+            ))}
+          </div>
+        </motion.div>
       )}
-    </Disclosure>
+    </nav>
   )
 }
