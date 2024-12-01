@@ -87,7 +87,7 @@ export default function Dashboard() {
       
       switch (currentStep) {
         case 'ideas':
-          response = await axios.post(`${API_URL}/api/generate/ideas`, {
+          response = await axios.post(`${API_URL}/generate-ideas`, {
             topic,
             tone,
             language
@@ -99,9 +99,9 @@ export default function Dashboard() {
 
         case 'title':
           if (!content.selectedIdea) {
-            throw new Error(language === 'English' ? 'Please select an idea first' : 'Najpierw wybierz pomysł');
+            throw new Error('Please select an idea first');
           }
-          response = await axios.post(`${API_URL}/api/generate/title`, {
+          response = await axios.post(`${API_URL}/generate-title`, {
             idea: content.selectedIdea,
             tone,
             language
@@ -113,9 +113,9 @@ export default function Dashboard() {
 
         case 'thumbnail':
           if (!content.selectedTitle) {
-            throw new Error(language === 'English' ? 'Please select a title first' : 'Najpierw wybierz tytuł');
+            throw new Error('Please select a title first');
           }
-          response = await axios.post(`${API_URL}/api/generate/thumbnail`, {
+          response = await axios.post(`${API_URL}/generate-thumbnail`, {
             title: content.selectedTitle,
             tone,
             language
@@ -127,9 +127,9 @@ export default function Dashboard() {
 
         case 'hook':
           if (!content.selectedTitle) {
-            throw new Error(language === 'English' ? 'Please select a title first' : 'Najpierw wybierz tytuł');
+            throw new Error('Please select a title first');
           }
-          response = await axios.post(`${API_URL}/api/generate/hook`, {
+          response = await axios.post(`${API_URL}/generate-hook`, {
             title: content.selectedTitle,
             tone,
             language
