@@ -11,11 +11,11 @@ type Language = 'English' | 'Polish';
 interface GeneratedContent {
   ideas?: string[];
   selectedIdea?: string;
-  titles?: string[];
+  title?: string[];
   selectedTitle?: string;
-  thumbnailTexts?: string[];
+  thumbnail?: string[];
   selectedThumbnail?: string;
-  hooks?: string[];
+  hook?: string[];
   selectedHook?: string;
 }
 
@@ -32,10 +32,12 @@ export default function Dashboard() {
   const [currentStep, setCurrentStep] = useState<Step>('ideas');
   const [content, setContent] = useState<GeneratedContent>({});
   const [topic, setTopic] = useState('')
-  const [tone] = useState<Tone>('engaging')
-  const [language] = useState<Language>('English')
+  const [tone, setTone] = useState<Tone>('engaging')
+  const [language, setLanguage] = useState<Language>('English')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null);
+
+  const tones: Tone[] = ['engaging', 'professional', 'funny', 'educational', 'dramatic', 'casual'];
 
   type ContentType = 'ideas' | 'title' | 'thumbnail' | 'hook';
   
@@ -105,7 +107,7 @@ export default function Dashboard() {
             language
           });
           if (response.data.titles) {
-            setContent(prev => ({ ...prev, titles: response.data.titles }));
+            setContent(prev => ({ ...prev, title: response.data.titles }));
           }
           break;
 
@@ -119,7 +121,7 @@ export default function Dashboard() {
             language
           });
           if (response.data.thumbnail_texts) {
-            setContent(prev => ({ ...prev, thumbnailTexts: response.data.thumbnail_texts }));
+            setContent(prev => ({ ...prev, thumbnail: response.data.thumbnail_texts }));
           }
           break;
 
@@ -133,7 +135,7 @@ export default function Dashboard() {
             language
           });
           if (response.data.hooks) {
-            setContent(prev => ({ ...prev, hooks: response.data.hooks }));
+            setContent(prev => ({ ...prev, hook: response.data.hooks }));
           }
           break;
       }
@@ -187,13 +189,13 @@ export default function Dashboard() {
         );
 
       case 'title':
-        return renderOptions(content.titles, 'title', content.selectedTitle);
+        return renderOptions(content.title, 'title', content.selectedTitle);
 
       case 'thumbnail':
-        return renderOptions(content.thumbnailTexts, 'thumbnail', content.selectedThumbnail);
+        return renderOptions(content.thumbnail, 'thumbnail', content.selectedThumbnail);
 
       case 'hook':
-        return renderOptions(content.hooks, 'hook', content.selectedHook);
+        return renderOptions(content.hook, 'hook', content.selectedHook);
 
       case 'content':
         return (
