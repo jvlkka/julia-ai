@@ -1,26 +1,23 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import Dict, List, Optional
 import openai
 import os
 from dotenv import load_dotenv
 import time
-import uvicorn
+import json
+import hashlib
+from datetime import datetime, timedelta
 
 load_dotenv()
 
 app = FastAPI()
 
-# Rate limiting configuration
-RATE_LIMIT_DURATION = 60  # seconds
-MAX_REQUESTS = 20  # requests per duration
-request_history: Dict[str, list] = {}
-
 # Configure CORS
 origins = [
-    "http://localhost:5173",    # Local development
-    "https://julia-ai.vercel.app",  # Production frontend
+    "http://localhost:5173",
+    "https://julia-ai.vercel.app",
 ]
 
 app.add_middleware(
@@ -33,170 +30,162 @@ app.add_middleware(
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def check_rate_limit(client_ip: str) -> bool:
-    current_time = time.time()
-    if client_ip not in request_history:
-        request_history[client_ip] = []
-    
-    # Remove old requests
-    request_history[client_ip] = [
-        timestamp for timestamp in request_history[client_ip]
-        if current_time - timestamp < RATE_LIMIT_DURATION
-    ]
-    
-    # Check if rate limit is exceeded
-    if len(request_history[client_ip]) >= MAX_REQUESTS:
-        return False
-    
-    # Add new request
-    request_history[client_ip].append(current_time)
-    return True
+# Cache configuration
+CACHE_DURATION = 3600  # Cache duration in seconds (1 hour)
+response_cache: Dict[str, dict] = {}
 
-@app.middleware("http")
-async def rate_limit_middleware(request, call_next):
-    client_ip = request.client.host
-    if not check_rate_limit(client_ip):
-        raise HTTPException(
-            status_code=429,
-            detail="Too many requests. Please try again later."
-        )
-    return await call_next(request)
+def get_cache_key(endpoint: str, params: dict) -> str:
+    """Generate a cache key from endpoint and parameters"""
+    param_str = json.dumps(params, sort_keys=True)
+    return hashlib.md5(f"{endpoint}:{param_str}".encode()).hexdigest()
 
-# Error handler for OpenAI API errors
-async def handle_openai_error(func):
-    try:
-        return await func()
-    except openai.RateLimitError:
-        raise HTTPException(
-            status_code=429,
-            detail="OpenAI API rate limit exceeded. Please try again later."
-        )
-    except openai.APIError:
-        raise HTTPException(
-            status_code=500,
-            detail="Error with OpenAI API. Please try again later."
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
+def get_cached_response(cache_key: str) -> Optional[dict]:
+    """Get response from cache if it exists and is not expired"""
+    if cache_key in response_cache:
+        cached_item = response_cache[cache_key]
+        if time.time() - cached_item['timestamp'] < CACHE_DURATION:
+            return cached_item['data']
+        else:
+            del response_cache[cache_key]
+    return None
+
+def cache_response(cache_key: str, response_data: dict):
+    """Cache the response with timestamp"""
+    response_cache[cache_key] = {
+        'data': response_data,
+        'timestamp': time.time()
+    }
 
 class IdeaRequest(BaseModel):
     topic: str
     tone: str
-    language: str = "English"
+    language: str
 
 class TitleRequest(BaseModel):
     idea: str
     tone: str
-    language: str = "English"
+    language: str
 
 class ThumbnailRequest(BaseModel):
     title: str
     tone: str
-    language: str = "English"
+    language: str
 
 class HookRequest(BaseModel):
     title: str
     tone: str
-    language: str = "English"
+    language: str
+
+async def generate_openai_response(messages: list, cache_key: str) -> dict:
+    """Generate response from OpenAI with caching"""
+    try:
+        # Check cache first
+        cached_response = get_cached_response(cache_key)
+        if cached_response:
+            return cached_response
+
+        # Generate new response
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-4",
+            messages=messages,
+            temperature=0.7
+        )
+        
+        result = {
+            'status': 'success',
+            'content': response.choices[0].message.content
+        }
+        
+        # Cache the response
+        cache_response(cache_key, result)
+        return result
+        
+    except openai.RateLimitError:
+        raise HTTPException(
+            status_code=429,
+            detail="OpenAI API rate limit reached. Please wait a minute before trying again."
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={"status": "error", "message": str(e)}
+        )
 
 @app.post("/api/generate/ideas")
 async def generate_ideas(request: IdeaRequest):
-    async def generate_ideas_async():
-        try:
-            prompt = f"""Generate 5 engaging YouTube video ideas about {request.topic}. 
-            The ideas should be in {request.language} and use a {request.tone} tone.
-            Each idea should be unique and have potential for high engagement.
-            Format the response as a numbered list (1., 2., etc.)."""
+    cache_key = get_cache_key("ideas", request.dict())
+    
+    prompt = f"""Generate 5 engaging YouTube video ideas about {request.topic}. 
+    The ideas should be in {request.language} and use a {request.tone} tone.
+    Each idea should be unique and have potential for high engagement.
+    Format the response as a numbered list (1., 2., etc.)."""
 
-            response = await openai.ChatCompletion.acreate(
-                model="gpt-4",
-                messages=[{"role": "system", "content": "You are a creative YouTube content strategist."},
-                         {"role": "user", "content": prompt}],
-                temperature=0.8
-            )
-            
-            # Process the response to create a clean list
-            ideas = [idea.strip() for idea in response.choices[0].message.content.split("\n") if idea.strip()]
-            return {"ideas": ideas, "status": "success"}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail={"error": str(e), "status": "error"})
+    messages = [
+        {"role": "system", "content": "You are a creative YouTube content strategist."},
+        {"role": "user", "content": prompt}
+    ]
 
-    return await handle_openai_error(generate_ideas_async)
+    response = await generate_openai_response(messages, cache_key)
+    ideas = [idea.strip() for idea in response['content'].split("\n") if idea.strip()]
+    return {"status": "success", "ideas": ideas}
 
 @app.post("/api/generate/title")
 async def generate_title(request: TitleRequest):
-    async def generate_title_async():
-        try:
-            prompt = f"""Create 5 catchy YouTube titles for a video about: {request.idea}
-            The title should be in {request.language} and use a {request.tone} tone.
-            Make it engaging and optimized for YouTube search.
-            Format the response as a numbered list (1., 2., etc.)."""
+    cache_key = get_cache_key("title", request.dict())
+    
+    prompt = f"""Create 5 catchy YouTube titles for a video about: {request.idea}
+    The title should be in {request.language} and use a {request.tone} tone.
+    Make it engaging and optimized for YouTube search.
+    Format the response as a numbered list (1., 2., etc.)."""
 
-            response = await openai.ChatCompletion.acreate(
-                model="gpt-4",
-                messages=[{"role": "system", "content": "You are a YouTube title optimization expert."},
-                         {"role": "user", "content": prompt}],
-                temperature=0.7
-            )
-            
-            titles = [title.strip() for title in response.choices[0].message.content.split("\n") if title.strip()]
-            return {"titles": titles, "status": "success"}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail={"error": str(e), "status": "error"})
+    messages = [
+        {"role": "system", "content": "You are a YouTube title optimization expert."},
+        {"role": "user", "content": prompt}
+    ]
 
-    return await handle_openai_error(generate_title_async)
+    response = await generate_openai_response(messages, cache_key)
+    titles = [title.strip() for title in response['content'].split("\n") if title.strip()]
+    return {"status": "success", "titles": titles}
 
 @app.post("/api/generate/thumbnail")
 async def generate_thumbnail_text(request: ThumbnailRequest):
-    async def generate_thumbnail_text_async():
-        try:
-            prompt = f"""Create 3 attention-grabbing text options for a YouTube thumbnail.
-            The video title is: {request.title}
-            Language: {request.language}
-            Tone: {request.tone}
-            Make it short, impactful, and easy to read on a thumbnail.
-            Format the response as a numbered list (1., 2., etc.)."""
+    cache_key = get_cache_key("thumbnail", request.dict())
+    
+    prompt = f"""Create 3 attention-grabbing text options for a YouTube thumbnail.
+    The video title is: {request.title}
+    Language: {request.language}
+    Tone: {request.tone}
+    Make it short, impactful, and easy to read on a thumbnail.
+    Format the response as a numbered list (1., 2., etc.)."""
 
-            response = await openai.ChatCompletion.acreate(
-                model="gpt-4",
-                messages=[{"role": "system", "content": "You are a YouTube thumbnail design expert."},
-                         {"role": "user", "content": prompt}],
-                temperature=0.7
-            )
-            
-            thumbnail_texts = [text.strip() for text in response.choices[0].message.content.split("\n") if text.strip()]
-            return {"thumbnail_texts": thumbnail_texts, "status": "success"}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail={"error": str(e), "status": "error"})
+    messages = [
+        {"role": "system", "content": "You are a YouTube thumbnail design expert."},
+        {"role": "user", "content": prompt}
+    ]
 
-    return await handle_openai_error(generate_thumbnail_text_async)
+    response = await generate_openai_response(messages, cache_key)
+    thumbnail_texts = [text.strip() for text in response['content'].split("\n") if text.strip()]
+    return {"status": "success", "thumbnail_texts": thumbnail_texts}
 
 @app.post("/api/generate/hook")
 async def generate_hook(request: HookRequest):
-    async def generate_hook_async():
-        try:
-            prompt = f"""Create 3 compelling video hooks/intros for a YouTube video titled: {request.title}
-            Language: {request.language}
-            Tone: {request.tone}
-            Each hook should be 2-3 sentences that grab attention in the first 5 seconds.
-            Format the response as a numbered list (1., 2., etc.)."""
+    cache_key = get_cache_key("hook", request.dict())
+    
+    prompt = f"""Create 3 compelling video hooks/intros for a YouTube video titled: {request.title}
+    Language: {request.language}
+    Tone: {request.tone}
+    Each hook should be 2-3 sentences that grab attention in the first 5 seconds.
+    Format the response as a numbered list (1., 2., etc.)."""
 
-            response = await openai.ChatCompletion.acreate(
-                model="gpt-4",
-                messages=[{"role": "system", "content": "You are a YouTube video hook writing expert."},
-                         {"role": "user", "content": prompt}],
-                temperature=0.7
-            )
-            
-            hooks = [hook.strip() for hook in response.choices[0].message.content.split("\n") if hook.strip()]
-            return {"hooks": hooks, "status": "success"}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail={"error": str(e), "status": "error"})
+    messages = [
+        {"role": "system", "content": "You are a YouTube video hook writing expert."},
+        {"role": "user", "content": prompt}
+    ]
 
-    return await handle_openai_error(generate_hook_async)
+    response = await generate_openai_response(messages, cache_key)
+    hooks = [hook.strip() for hook in response['content'].split("\n") if hook.strip()]
+    return {"status": "success", "hooks": hooks}
 
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

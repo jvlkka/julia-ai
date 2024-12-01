@@ -32,22 +32,15 @@ export default function Dashboard() {
   const [currentStep, setCurrentStep] = useState<Step>('ideas');
   const [content, setContent] = useState<GeneratedContent>({});
   const [topic, setTopic] = useState('')
-  const [tone, setTone] = useState<Tone>('engaging')
-  const [language, setLanguage] = useState<Language>('English')
+  const [tone] = useState<Tone>('engaging')
+  const [language] = useState<Language>('English')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null);
 
-  const tones = [
-    { id: 'engaging' as Tone, name: 'Engaging', namePL: 'Angażujący' },
-    { id: 'professional' as Tone, name: 'Professional', namePL: 'Profesjonalny' },
-    { id: 'funny' as Tone, name: 'Funny', namePL: 'Zabawny' },
-    { id: 'educational' as Tone, name: 'Educational', namePL: 'Edukacyjny' },
-    { id: 'dramatic' as Tone, name: 'Dramatic', namePL: 'Dramatyczny' },
-    { id: 'casual' as Tone, name: 'Casual', namePL: 'Swobodny' },
-  ] as const;
-
-  const handleSelection = (type: keyof Pick<GeneratedContent, 'ideas' | 'title' | 'thumbnail' | 'hook'>, item: string) => {
-    const key = `selected${type.charAt(0).toUpperCase() + type.slice(1)}` as keyof GeneratedContent;
+  type ContentType = 'ideas' | 'title' | 'thumbnail' | 'hook';
+  
+  const handleSelection = (type: ContentType, item: string) => {
+    const key = `selected${type.charAt(0).toUpperCase() + type.slice(1)}` as const;
     setContent(prev => ({
       ...prev,
       [key]: item
@@ -56,7 +49,7 @@ export default function Dashboard() {
 
   const renderOptions = (
     items: string[] | undefined,
-    type: keyof Pick<GeneratedContent, 'ideas' | 'title' | 'thumbnail' | 'hook'>,
+    type: ContentType,
     selectedItem?: string
   ) => {
     if (!items) return null;
@@ -97,7 +90,7 @@ export default function Dashboard() {
             tone,
             language
           });
-          if (response.data.status === 'success' && response.data.ideas) {
+          if (response.data.ideas) {
             setContent(prev => ({ ...prev, ideas: response.data.ideas }));
           }
           break;
@@ -111,7 +104,7 @@ export default function Dashboard() {
             tone,
             language
           });
-          if (response.data.status === 'success' && response.data.titles) {
+          if (response.data.titles) {
             setContent(prev => ({ ...prev, titles: response.data.titles }));
           }
           break;
@@ -125,7 +118,7 @@ export default function Dashboard() {
             tone,
             language
           });
-          if (response.data.status === 'success' && response.data.thumbnail_texts) {
+          if (response.data.thumbnail_texts) {
             setContent(prev => ({ ...prev, thumbnailTexts: response.data.thumbnail_texts }));
           }
           break;
@@ -139,7 +132,7 @@ export default function Dashboard() {
             tone,
             language
           });
-          if (response.data.status === 'success' && response.data.hooks) {
+          if (response.data.hooks) {
             setContent(prev => ({ ...prev, hooks: response.data.hooks }));
           }
           break;
@@ -151,16 +144,15 @@ export default function Dashboard() {
       if (currentIndex < steps.length - 1) {
         setCurrentStep(steps[currentIndex + 1]);
       }
+
     } catch (err) {
       if (axios.isAxiosError(err)) {
         if (err.response?.status === 429) {
           setError(
-            language === 'English'
-              ? 'Too many requests. Please wait a moment before trying again.'
-              : 'Zbyt wiele żądań. Poczekaj chwilę przed ponowną próbą.'
+            language === 'English' 
+              ? 'OpenAI rate limit reached. Please wait a minute before trying again.'
+              : 'Limit OpenAI osiągnięty. Poczekaj minutę przed ponowną próbą.'
           );
-        } else if (err.response?.data?.detail) {
-          setError(err.response.data.detail);
         } else {
           setError(
             language === 'English'
@@ -170,12 +162,6 @@ export default function Dashboard() {
         }
       } else if (err instanceof Error) {
         setError(err.message);
-      } else {
-        setError(
-          language === 'English'
-            ? 'An unexpected error occurred.'
-            : 'Wystąpił nieoczekiwany błąd.'
-        );
       }
     } finally {
       setIsLoading(false);
